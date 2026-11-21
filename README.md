@@ -51,7 +51,7 @@ The first track is the SIEM on a flat network. I wanted the SIEM to work before 
 
 | VM | IP on lab-net | RAM | vCPU | Disk | Role |
 |---|---|---|---|---|---|
-| Windows host | 192.168.100.1 | (host) | (host) | (host) | Browser for Kibana, SSH client |
+| Windows host | 192.168.100.1 | (host) | (host) | (host) | Browser for Kibana, SSH client to make my life easyer |
 | `elk-siem-node` | 192.168.100.10 | 16 GB | 4 | 80 GB | Elasticsearch, Kibana, Fleet Server |
 | `target-node` | 192.168.100.20 | 4 GB | 2 | 30 GB | Monitored host, DVWA in Docker, Elastic Agent |
 | `kali` | 192.168.100.30 | 8 GB | 2 | existing | Attacker |

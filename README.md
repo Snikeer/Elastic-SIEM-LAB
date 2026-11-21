@@ -12,7 +12,7 @@ I wanted hands-on experience with Elastic Security, because many job postings na
 
 ## Tools and versions
 
-- Windows host running VMware Workstation Pro. VMware Player does not support the custom host-only networks I use.
+- Windows host running VMware Workstation Pro.
 - Ubuntu Server 24.04 LTS for the Elastic server and the monitored host.
 - Kali Linux VM as the attacker.
 - Elastic Stack 9.5.3 (Elasticsearch, Kibana, Fleet Server, Elastic Agent), the version that was current when I started.

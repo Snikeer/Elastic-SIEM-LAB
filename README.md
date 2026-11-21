@@ -1,6 +1,6 @@
 # Elastic SIEM Lab
 
-A hands-on lab for learning how a SIEM works in practice. You will build a small Elastic Stack, connect a monitored Linux host to it, attack that host from another virtual machine, and write the detection rules that should catch those attacks. Everything runs in VMware on one Windows machine.
+A hands-on lab for learning how a SIEM works in practice. I will build a small Elastic Stack, connect a monitored Linux host to it, attack that host from another virtual machine, and write the detection rules that should catch those attacks. Everything runs in VMware on one Windows machine.
 
 This is written as a guide, not only as documentation. Each step explains what we do and why, shows the commands, describes what the output should look like, and lists the mistakes people usually make. If you follow it from start to finish, you should get the same results, and you should understand why the parts fit together the way they do.
 

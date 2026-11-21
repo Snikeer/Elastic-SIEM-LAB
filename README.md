@@ -1,36 +1,29 @@
 # Elastic SIEM Lab
 
-A hands-on lab for learning how a SIEM works in practice. I will build a small Elastic Stack, connect a monitored Linux host to it, attack that host from another virtual machine, and write the detection rules that should catch those attacks. Everything runs in VMware on one Windows machine.
+I built this lab to learn how a SIEM works in practice, the way it is used in a SOC. The setup is small: one Elastic Stack server, one Linux host that gets monitored, one Kali VM that attacks it, and the detection rules I write to catch those attacks. Everything runs inside VMware on one Windows machine.
 
-This is written as a guide, not only as documentation. Each step explains what we do and why, shows the commands, describes what the output should look like, and lists the mistakes people usually make. If you follow it from start to finish, you should get the same results, and you should understand why the parts fit together the way they do.
+This repository documents what I did, why I did it, and what went wrong along the way. I kept the commands and the screenshots so the results can be checked.
 
-## Who this is for
+## Why I built it
 
-You do not need to be a Linux expert. You should be comfortable opening a terminal, editing a text file, and reading an error message without giving up. Some networking knowledge helps in the segmentation chapter, and that chapter explains the basics as it goes.
+I wanted to work with Elastic Security myself, because many SOC job postings name it and reading about a tool is not the same as running it. I also wanted to see how a log gets from a host into the SIEM, and why a detection can fail even when the rule looks correct. Network segmentation came later, as a second track. I wanted the SIEM working before I started changing firewall rules, so I would know which part caused a problem.
 
-If you have never used a SIEM before, read the glossary first. The rest of the guide uses those words without explaining them again.
+## Tools and versions
 
-## What you need
+- Windows host running VMware Workstation Pro. VMware Player does not support the custom host-only networks I use.
+- Ubuntu Server 24.04 LTS for the Elastic server and the monitored host.
+- Kali Linux VM as the attacker.
+- Elastic Stack 9.5.3 (Elasticsearch, Kibana, Fleet Server, Elastic Agent), the version that was current when I started.
 
-A Windows machine with VMware Workstation Pro. VMware Player does not support the custom host-only networks this lab uses.
+The host has 100 GB of RAM, which is far more than this lab needs. The VM sizes below are what I chose, not the minimum. I have not tried smaller sizes, so I cannot say how low they can go.
 
-Memory is the main constraint. This guide is written for a host with 32 GB of RAM, which fits the VM sizes in the design table below with some room left for Windows. The lab can run on 24 GB if you give the Elastic VM 8 GB and keep the other VMs small. I have not tested the smaller setup yet, so treat it as a plan, not a guarantee. The Elastic VM should not go below 8 GB.
-
-You also need the Ubuntu Server 24.04 LTS ISO, the official Kali Linux VMware image from kali.org, and a GitHub account if you want to follow the documentation part.
-
-## How to read each step
-
-Every step follows the same layout. The first line says what we do. The next paragraph explains why, and how the step connects to the SIEM or to the segmentation track. After that come the commands, with a short description of what each one does. Then comes the expected result, so you know the step worked before moving on. The last part covers the most common things that go wrong and how to fix them.
-
-Screenshots only appear where they show something you can check. If a step has no screenshot, the terminal output is the proof.
-
-## Glossary
+## Terms used in this README
 
 **SIEM (Security Information and Event Management):** a system that collects logs from many machines, stores them in one place, and runs rules that flag suspicious activity.
 
 **Elasticsearch:** the search and storage engine that holds the logs.
 
-**Kibana:** the web interface where you search logs, view dashboards, and manage detection rules.
+**Kibana:** the web interface where I search logs, view dashboards, and manage detection rules.
 
 **Fleet Server:** the component that manages Elastic Agents from one central place.
 
@@ -50,9 +43,9 @@ Screenshots only appear where they show something you can check. If a step has n
 
 ### Why two tracks
 
-The main track is the SIEM. The first part of the lab uses one flat network, so when something breaks you know the problem is in the SIEM and not in a firewall rule. Network segmentation comes later, as chapter 11. By then logs are already flowing, so each firewall rule can be tested against real data.
+The first track is the SIEM on a flat network. I wanted the SIEM to work before I added firewall rules, so that a broken log pipeline could only be caused by the SIEM setup. The second track is segmentation, which I added after logs were already flowing. That way each firewall rule could be tested against real data.
 
-### Track 1: SIEM on a flat lab network
+### Track 1: flat lab network
 
 | VM | IP on lab-net | RAM | vCPU | Disk | Role |
 |---|---|---|---|---|---|
@@ -61,13 +54,13 @@ The main track is the SIEM. The first part of the lab uses one flat network, so 
 | `target-node` | 192.168.100.20 | 4 GB | 2 | 30 GB | Monitored host, DVWA in Docker, Elastic Agent |
 | `kali` | 192.168.100.30 | 8 GB | 2 | existing | Attacker |
 
-All lab VMs sit on one host-only network called `lab-net`, `192.168.100.0/24`. The Windows host gets `.1` through its VMware adapter, so you can open Kibana in the browser and SSH into every VM from PowerShell or VS Code without switching windows.
+All lab VMs sit on one host-only network called `lab-net`, `192.168.100.0/24`. The Windows host has `.1` on this network, so I can open Kibana in the browser and SSH into each VM from PowerShell or VS Code without switching windows. Keeping the lab reachable from the host was a practical choice for working faster, not a security decision.
 
-Each VM also has a second network adapter on NAT. It is used only for package updates, so the machines can reach the Ubuntu and Elastic repositories. Attack traffic never uses that adapter, which is why it does not affect the lab.
+Each VM also has a second adapter on NAT. I use it only for package updates. Attack traffic never goes through it, so it does not change what the lab tests.
 
-### Track 2: Segmentation (chapter 11)
+### Track 2: segmentation (chapter 11)
 
-Real companies do not run everything on one network. A SOC usually sees traffic from several zones, and firewall logs are one of the most useful data sources it has. In this track, a fourth VM, `fw-node`, becomes a router and firewall running nftables. It splits the lab into four zones and denies traffic between them by default. Its logs are sent to the same SIEM, so the firewall becomes a data source too.
+Companies rarely run everything on one network. A SOC usually sees traffic from several zones, and firewall logs are among the most useful sources it has. In this track I add a fourth VM, `fw-node`, as a router and firewall running nftables. It splits the lab into four zones with default deny between them, and its logs go to the same SIEM.
 
 | Zone | Network | Hosts |
 |---|---|---|
@@ -76,11 +69,11 @@ Real companies do not run everything on one network. A SOC usually sees traffic 
 | dmz | 10.10.30.0/24 | target-node |
 | security | 10.10.40.0/24 | elk-siem-node |
 
-The Windows host can reach every zone over SSH, and it can reach Kibana in the security zone. The attack zone can reach the dmz zone, which is the point of the exercise. The dmz zone can reach Fleet and Elasticsearch in the security zone, on those ports only, because agents always start the connection. The attack zone has no path to the security zone at all, so Kali cannot see the SIEM.
+The rules I plan to allow are these. The Windows host reaches every zone over SSH, and Kibana in the security zone. The attack zone reaches the dmz zone, since that is where the attacks land. The dmz zone reaches Fleet and Elasticsearch in the security zone, on those ports only, because agents start the connection. The attack zone has no path to the security zone. I want to confirm that with a test from Kali, not just assume it.
 
 ## Phases
 
-- [ ] Phase 0: Design (this section)
+- [ ] Phase 0: Design
 - [ ] Phase 1: Virtual machines and flat network
 - [ ] Phase 2: Base hardening
 - [ ] Phase 3: Elasticsearch and Kibana
@@ -93,6 +86,8 @@ The Windows host can reach every zone over SSH, and it can reach Kibana in the s
 - [ ] Phase 10: Summary and lessons learned
 - [ ] Phase 11: Segmentation with fw-node
 
-## Step-by-step guide
+## Implementation log
 
-The steps are added as each phase is completed. Phase 1 comes first.
+Each phase below follows the same pattern. First what I did, then why, then the commands, then the output I got, and last the problems I ran into and how I solved them. Screenshots only appear where they show something I want to prove.
+
+The log is filled in as each phase is finished. Phase 1 is next.

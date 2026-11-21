@@ -1,6 +1,6 @@
 # Elastic SIEM Lab
 
-I built this lab to learn Elastic Security hands-on. I already work with SIEM and SOC tooling, so the goal here was to get comfortable with how Elastic does it: how logs get from a host into Elasticsearch, how Fleet manages the agents, and how detection rules are written and tested in Kibana. Everything runs inside VMware on one Windows machine.
+I built this lab to learn Elastic Security hands-on. I have studied SIEM concepts during my cyber security bachelor and in the Google Cybersecurity Professional Certificate, but I had not run a SIEM myself. The goal here is to get comfortable with how Elastic does it: how logs get from a host into Elasticsearch, how Fleet manages the agents, and how detection rules are written and tested in Kibana. Everything runs inside VMware.
 
 The setup is small: one Elastic Stack server, one Linux host that gets monitored, one Kali VM that attacks it, and the detection rules I write to catch those attacks.
 
@@ -8,7 +8,7 @@ This repository documents what I did, why I did it, and what went wrong along th
 
 ## Why I built it
 
-I wanted hands-on time with Elastic Security, because many SOC job postings name it and reading the documentation is not the same as running the stack. I also wanted to see how a log gets from a host into Elasticsearch, and why a detection can fail even when the rule looks correct in Kibana. Network segmentation came later, as a second track. I wanted Elastic working before I started changing firewall rules, so I would know which part caused a problem.
+I wanted hands-on time with Elastic Security, because many job postings name it and reading the documentation is not the same as running the stack. I also wanted to see how a log gets from a host into Elasticsearch, and why a detection can fail even when the rule looks correct in Kibana. Network segmentation came later, as a second track. I wanted Elastic working before I started changing firewall rules, so I would know which part caused a problem.
 
 ## Tools and versions
 
@@ -62,7 +62,7 @@ Each VM also has a second adapter on NAT. I use it only for package updates. Att
 
 ### Track 2: segmentation (chapter 11)
 
-Companies rarely run everything on one network. A SOC usually sees traffic from several zones, and firewall logs are among the most useful sources it has. In this track I add a fourth VM, `fw-node`, as a router and firewall running nftables. It splits the lab into four zones with default deny between them, and its logs go to the same SIEM.
+Companies rarely run everything on one network, and firewall logs are among the most useful sources a security team has. In this track I add a fourth VM, `fw-node`, as a router and firewall running nftables. It splits the lab into four zones with default deny between them, and its logs go to the same SIEM.
 
 | Zone | Network | Hosts |
 |---|---|---|

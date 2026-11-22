@@ -93,35 +93,161 @@ The rules I plan to allow are these. The Windows host reaches every zone over SS
 Each phase below follows the same pattern. First what I did, then why, then the commands, then the output I got, and last the problems I ran into and how I solved them. Screenshots only appear where they show something I want to prove.
 
 
-### Phase 1: Virtual machines and flat network
+### Phase 1: Lab network and virtual machines
 
-**What I did:** Created a host-only network (VMnet2) called lab-net with DHCP turned off. Installed `target-node` on Ubuntu Server 24.04 LTS. Gave `elk-siem-node`, `target-node` and `kali` a second adapter on NAT for package updates. Set static addresses with netplan on the two Ubuntu VMs and with NetworkManager on Kali. Checked connectivity from Kali, from the ELK node and from the Windows host.
+#### Background
+Phase 0 set the plan: a flat network first, so the SIEM can be checked before any firewall rules are added. This phase builds the network and the three VMs the rest of the lab depends on. Nothing from Elastic is installed yet.
 
-**Why I chose Ubuntu Server 24.04:** The Elastic support matrix for 9.5.3 lists Ubuntu 24.04 as a supported platform (screenshot below). It is the current LTS release, with standard support until 2029, and it is the same OS as the PHP lab, so I only have to keep one set of commands in my head.
-
-**Why static addresses:** I wanted addresses I could write in this README and use in firewall rules later. Turning off DHCP made that predictable. I stopped cloud-init from rewriting the network config, because otherwise the addresses would change after a reboot.
-
-**Why a NAT adapter as well:** The NAT adapter is only for package downloads, so the VMs can reach the Ubuntu and Elastic repositories. Lab traffic uses the lab-net route, and Kali has `never-default` on lab-net, so attack traffic cannot leave through NAT by accident.
-
-**Commands:** `ip -br a`, `ip route`, `netplan try`, `nmcli con add`, `ping`, `curl`, `reboot` (persistence test).
-
-**Output from `ip route` on elk-siem-node:**
-
-```
-[paste output]
-```
-
-**Problems I hit:** `[what did not work the first time, and what fixed it]`
+#### 1. Choosing Ubuntu Server 24.04
+Before creating any VM I checked the Elastic support matrix for version 9.5.3. A wrong OS choice is much more expensive to fix after Elasticsearch is installed, so this was the first thing I looked at. Ubuntu 24.04 is listed as supported.
 
 <img src="docs/screenshots/00_elastic_support_matrix.png" alt="Elastic support matrix for Elastic Stack 9.5.3 showing Ubuntu 24.04" width="700">
 
+I picked 24.04 for two reasons. It is the current LTS release, with standard support until April 2029. It is also the same OS as the PHP lab, so I do not have to remember two sets of commands.
+
+#### 2. Creating the lab network
+In VMware Workstation I opened **Edit > Virtual Network Editor** and clicked **Change Settings**, because the editor needs administrator rights. I selected VMnet2 and set it to Host-only. I unticked "Use local DHCP service to distribute IP addresses to VMs", set the subnet to `192.168.100.0` with mask `255.255.255.0`, and applied the change.
+
+I turned DHCP off on purpose. If VMware hands out addresses, they can change, and then the addresses I write in this README and later use in firewall rules would be wrong. Fixed addresses make every later step easier to check.
+
 <img src="docs/screenshots/01_vmnet_lab_net_config.png" alt="VMware Virtual Network Editor showing VMnet2 with DHCP disabled" width="600">
+
+The Windows host gets `192.168.100.1` on this network through its VMware adapter. I check that in step 8.
+
+#### 3. Creating target-node
+I created `target-node` the same way as the other VMs: Ubuntu Server 24.04 LTS, user `ubuntu`, 2 vCPU, 4 GB RAM, 30 GB disk. I ticked **Install OpenSSH server** during installation, so I could SSH in from PowerShell instead of working in the VMware console.
+
+After installation I set the hostname:
+
+```bash
+sudo hostnamectl set-hostname target-node
+```
+
+`hostnamectl` changes the name the machine uses for itself. The name shows up in logs and later in the Elastic UI, so a clear name makes the data easier to read. `elk-siem-node` got its name the same way.
+
+#### 4. Two network adapters on each VM
+`elk-siem-node`, `target-node` and `kali` each have two adapters:
+
+- **Adapter 1:** Custom, VMnet2 (lab-net). Lab traffic only.
+- **Adapter 2:** NAT. Package updates only.
+
+I added them under **VM Settings > Add > Network Adapter** with the VM powered off. Lab-net is the first adapter, so its interface name is predictable. NAT is second, so the default route stays on it. I check that in step 8.
+
+Why keep NAT at all? Without it the VMs cannot reach the Ubuntu and Elastic package repositories. I also do not want attack traffic to ever have a way out of the lab. For that reason, lab-net is the only route for `192.168.100.0/24`, and Kali gets `never-default` on lab-net (step 7).
 
 <img src="docs/screenshots/02_elk_siem_node_adapters.png" alt="Hardware settings on elk-siem-node with lab-net and NAT adapters" width="600">
 
+#### 5. Stopping cloud-init from rewriting the network
+Ubuntu Server uses cloud-init, and cloud-init rebuilds the network config at boot. That would wipe my static addresses on the next reboot. I created a file that tells it to leave networking alone, on both Ubuntu VMs:
+
+```bash
+sudo nano /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+```
+
+```yaml
+network: {config: disabled}
+```
+
+Then I removed the netplan file cloud-init had generated, after my own file was in place:
+
+```bash
+sudo rm /etc/netplan/50-cloud-init.yaml
+ls /etc/netplan/
+```
+
+Only `99-lab.yaml` should remain.
+
+#### 6. Static addresses with netplan
+First I checked which interface name belongs to which adapter:
+
+```bash
+ip -br a
+```
+
+On my VMs, `ens33` is the NAT adapter and `ens37` is lab-net. Names can differ between hypervisor versions, so check your own output before copying anything.
+
+I changed the network setup from the VMware console, not over SSH. Changing the IP address drops the SSH session, so I could not have pasted the next command in time.
+
+On `elk-siem-node` the file is `/etc/netplan/99-lab.yaml`:
+
+```yaml
+network:
+  version: 2
+  ethernets:
+    ens33:
+      dhcp4: true
+    ens37:
+      dhcp4: false
+      addresses:
+        - 192.168.100.10/24
+```
+
+On `target-node` the file is the same, with `192.168.100.20/24` on ens37.
+
+Netplan reads indentation strictly, so I used two spaces per level and no tabs. I restricted the file permissions and tested before applying:
+
+```bash
+sudo chmod 600 /etc/netplan/99-lab.yaml
+sudo netplan try
+```
+
+`netplan try` applies the new config for a short time and waits for confirmation. If access is lost, it rolls back by itself. I used `try` and not `apply` the first time for that reason.
+
+#### 7. Kali on lab-net
+Kali uses NetworkManager, so I set the static address with `nmcli`. First I found the interface:
+
+```bash
+nmcli device status
+```
+
+Kali has `eth0` for NAT and `eth1` for lab-net. Then I created a connection named `lab-net`:
+
+```bash
+sudo nmcli con add type ethernet ifname eth1 con-name lab-net \
+  ipv4.method manual ipv4.addresses 192.168.100.30/24 \
+  ipv4.never-default yes
+sudo nmcli con up lab-net
+```
+
+`ipv4.never-default yes` is the setting that matters here. Without it, NetworkManager can pick lab-net as the default route, and then internet access stops or traffic leaves by the wrong interface. With it, lab-net only handles `192.168.100.0/24`.
+
+<img src="docs/screenshots/05_kali_ip_br_a.png" alt="ip -br a on Kali showing eth0 on NAT and eth1 on lab-net" width="500">
+
+#### 8. Verification
+Interfaces from `ip -br a`:
+
+| VM | Interface | Role | State | Address |
+|---|---|---|---|---|
+| target-node | ens33 | NAT | UP | 192.168.95.155/24 |
+| target-node | ens37 | lab-net | UP | 192.168.100.20/24 |
+| elk-siem-node | ens33 | NAT | UP | 192.168.95.156/24 |
+| elk-siem-node | ens37 | lab-net | UP | 192.168.100.10/24 |
+| kali | eth0 | NAT | UP | 192.168.95.151/24 |
+| kali | eth1 | lab-net | UP | 192.168.100.30/24 |
+
+The routing table on `target-node` after the change:
+
+```
+default via 192.168.95.2 dev ens33 proto dhcp src 192.168.95.155 metric 100
+192.168.95.0/24 dev ens33 proto kernel scope link src 192.168.95.155 metric 100
+192.168.100.0/24 dev ens37 proto kernel scope link src 192.168.100.20
+```
+
+The default route goes out through NAT, and the lab network goes out through lab-net. `elk-siem-node` shows the same pattern with its own addresses.
+
 <img src="docs/screenshots/03_ip_route_elk_siem_node.png" alt="ip route and interface addresses on elk-siem-node" width="600">
+
+From each Ubuntu VM I pinged the other two lab addresses, and every ping got a reply with 0% packet loss. `curl` to the Ubuntu archive returned `HTTP/1.1 200 OK`, so NAT works for updates.
+
+From the Windows host in PowerShell, all three lab addresses answered. SSH logged in to `target-node` and `elk-siem-node` without switching windows.
 
 <img src="docs/screenshots/04_connectivity_from_windows.png" alt="Ping and SSH from the Windows host to lab-net" width="600">
 
+Reboot test: `[after a reboot the addresses stayed the same: confirm this and paste the output of ip -br a]`
 
-The log is filled in as each phase is finished. Phase 1 is next.
+#### 9. Result and assessment
+- **Result:** All three VMs are on lab-net with fixed addresses. They can reach each other and the Windows host, and they still reach the internet through NAT.
+- **Assessment:** The network works, but it is flat, which is what I wanted for now. Any VM can reach any other VM on lab-net. That is fine for phases 2 to 10, and it is exactly what chapter 11 will change.
+- **Problems I hit:** `[add here if anything failed the first time, and what fixed it]`
+
+Phase 2 is base hardening on the two Ubuntu VMs, before Elasticsearch is installed.

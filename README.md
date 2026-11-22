@@ -233,7 +233,7 @@ From the Windows host in PowerShell, all three lab addresses answered. SSH logge
 
 <img src="docs/screenshots/05_connectivity_from_windows.png" alt="Ping and SSH from the Windows host to lab-net" width="600">
 
-Reboot test: `[after a reboot the addresses stayed the same: confirm this and paste the output of ip -br a]`
+Reboot test: `[after a reboot the addresses stayed the same: ens37 UP 192.168.100.10/24`
 
 #### 9. Result and assessment
 - **Result:** All three VMs are on lab-net with fixed addresses. They can reach each other and the Windows host, and they still reach the internet through NAT.

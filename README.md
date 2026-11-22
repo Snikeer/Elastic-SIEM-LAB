@@ -238,6 +238,5 @@ Reboot test: after a reboot the addresses stayed the same: `ens37 UP 192.168.100
 #### 9. Result and assessment
 - **Result:** All three VMs are on lab-net with fixed addresses. They can reach each other and the Windows host, and they still reach the internet through NAT.
 - **Assessment:** The network works, but it is flat, which is what I wanted for now. Any VM can reach any other VM on lab-net. That is fine for phases 2 to 10, and it is exactly what chapter 11 will change.
-- **Problems I hit:** `[add here if anything failed the first time, and what fixed it]`
 
 Phase 2 is base hardening on the two Ubuntu VMs, before Elasticsearch is installed.

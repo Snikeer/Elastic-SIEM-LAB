@@ -201,7 +201,7 @@ sudo nmcli con up lab-net
 
 `ipv4.never-default yes` is the setting that matters here. Without it, NetworkManager can pick lab-net as the default route, and then internet access stops or traffic leaves by the wrong interface. With it, lab-net only handles `192.168.100.0/24`.
 
-<img src="docs/screenshots/03_kali_ip_br_a.png" alt="ip -br a on Kali showing eth0 on NAT and eth1 on lab-net" width="500">
+<img src="docs/screenshots/03_kali_ip_br_a.png" alt="ip -br a on Kali showing eth0 on NAT and eth1 on lab-net" width="600">
 
 #### 8. Verification
 Interfaces from `ip -br a`:

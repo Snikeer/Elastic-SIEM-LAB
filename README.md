@@ -75,8 +75,8 @@ The rules I plan to allow are these. The Windows host reaches every zone over SS
 
 ## Phases
 
-- [ ] Phase 0: Design
-- [ ] Phase 1: Virtual machines and flat network
+- [X] Phase 0: Design
+- [X] Phase 1: Virtual machines and flat network
 - [ ] Phase 2: Base hardening
 - [ ] Phase 3: Elasticsearch and Kibana
 - [ ] Phase 4: Fleet Server and Elastic Agent

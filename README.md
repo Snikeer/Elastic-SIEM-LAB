@@ -98,8 +98,9 @@ Each phase below follows the same pattern. First what I did, then why, then the 
 #### Background
 Phase 0 set the plan: a flat network first, so the SIEM can be checked before any firewall rules are added. This phase builds the network and the three VMs the rest of the lab depends on. Nothing from Elastic is installed yet.
 
+
 #### 1. Choosing Ubuntu Server 24.04
-Before creating any VM I checked the Elastic support matrix for version 9.5.3. A wrong OS choice is much more expensive to fix after Elasticsearch is installed, so this was the first thing I looked at. Ubuntu 24.04 is listed as supported.
+Before creating any VM I checked the Elastic support matrix for version 9.5.3. A wrong OS choice will be hard to fix after, so this was the first thing I looked at. Ubuntu 24.04 is listed as supported.
 https://www.elastic.co/support/matrix 
 
 <img src="docs/screenshots/00_elastic_support_matrix.png" alt="Elastic support matrix for Elastic Stack 9.5.3 showing Ubuntu 24.04" width="700">
@@ -108,11 +109,12 @@ https://www.elastic.co/support/matrix
 #### 2. Creating the lab network
 In VMware Workstation I opened **Edit > Virtual Network Editor** and clicked **Change Settings**, because the editor needs administrator rights. I selected VMnet2 and set it to Host-only. I unticked "Use local DHCP service to distribute IP addresses to VMs", set the subnet to `192.168.100.0` with mask `255.255.255.0`, and applied the change.
 
-I turned DHCP off on purpose. If VMware hands out addresses, they can change, and then the addresses I write in this README and later use in firewall rules would be wrong. Fixed addresses make every later step easier to check.
+I turned DHCP off on purpose. If VMware hands out addresses, they can change, and then the addresses in this README and in later firewall rules would be wrong. Fixed addresses make every later step easier to check.
 
 <img src="docs/screenshots/01_vmnet_lab_net_config.png" alt="VMware Virtual Network Editor showing VMnet2 with DHCP disabled" width="600">
 
-The Windows host gets `192.168.100.1` on this network through its VMware adapter. I check that in step 8.
+The Windows host gets `192.168.100.1` on this network through its VMware adapter. I check that from PowerShell in step 8.
+
 
 #### 3. Creating target-node
 I created `target-node` the same way as the other VMs: Ubuntu Server 24.04 LTS, user `ubuntu`, 2 vCPU, 4 GB RAM, 30 GB disk. I ticked **Install OpenSSH server** during installation, so I could SSH in from PowerShell instead of working in the VMware console.
@@ -126,18 +128,25 @@ I created `target-node` the same way as the other VMs: Ubuntu Server 24.04 LTS, 
 
 I added them under **VM Settings > Add > Network Adapter** with the VM powered off. Lab-net is the first adapter, so its interface name is predictable. NAT is second, so the default route stays on it. I check that in step 8.
 
-Why keep NAT at all? Without it the VMs cannot reach the Ubuntu and Elastic package repositories. I also do not want attack traffic to ever have a way out of the lab. For that reason, lab-net is the only route for `192.168.100.0/24`, and Kali gets `never-default` on lab-net (step 7).
+Why keep NAT at all? Without it the VMs cannot reach the Ubuntu and Elastic package repositories. Lab-net has no gateway configured, so the default route stays on NAT. I also do not want attack traffic to have a way out of the lab, which is why lab-net is the only route for `192.168.100.0/24`, and why Kali gets `never-default` on lab-net (step 7).
+
 
 <img src="docs/screenshots/02_elk_siem_node_adapters.png" alt="Hardware settings on elk-siem-node with lab-net and NAT adapters" width="600">
 
 #### 5. Stopping cloud-init from rewriting the network
-Ubuntu Server uses cloud-init, and cloud-init rebuilds the network config at boot. That would wipe my static addresses on the next reboot. I created a file that tells it to leave networking alone, on both Ubuntu VMs:
+Ubuntu Server uses cloud-init, and cloud-init rebuilds the network config at boot. That would wipe my static addresses on the next reboot. On both Ubuntu VMs I created a file that tells cloud-init to leave networking alone:
+
 
 ```bash
 sudo nano /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
 ```
 
-With a content `network: {config: disabled}`
+The file contains one line:
+
+```yaml
+network: {config: disabled}
+```
+
 Then I removed the netplan file cloud-init had generated, after my own file was in place:
 
 ```bash
@@ -156,9 +165,10 @@ ip -br a
 
 On my VMs, `ens33` is the NAT adapter and `ens37` is lab-net adapter. The giveaway was that the NAT adapter had already received an IP address via DHCP, while the other adapter was empty (no IP address assigned). Names can differ between hypervisor versions, so check your own output before copying anything from me.
 
-I changed the network configuration from the VMware console, while still being connected over SSH through the NAT adapter, since the NAT connection was still active at that point. 
+I edited the network config over SSH. That worked because my SSH session ran over the NAT address, which did not change. If I had connected over lab-net, changing the lab-net address would have dropped the session in the middle of the change.
 
 On `elk-siem-node` the file is `/etc/netplan/99-lab.yaml`:
+
 
 ```yaml
 network:
@@ -176,12 +186,14 @@ On `target-node` the file is the same, with `192.168.100.20/24` on ens37.
 
 Netplan reads indentation strictly, so I used two spaces per level and no tabs. I restricted the file permissions and tested before applying:
 
+
 ```bash
 sudo chmod 600 /etc/netplan/99-lab.yaml
 sudo netplan try
 ```
 
 `netplan try` applies the new config for a short time and waits for confirmation. If access is lost, it rolls back by itself. I used `try` and not `apply` the first time for that reason.
+
 
 #### 7. Kali on lab-net
 Kali uses NetworkManager, so I set the static address with `nmcli`. First I found the interface:
@@ -234,13 +246,15 @@ From the Windows host in PowerShell, all three lab addresses answered. SSH logge
 <img src="docs/screenshots/05_connectivity_from_windows.png" alt="Ping and SSH from the Windows host to lab-net" width="600">
 
 Reboot test: after a reboot the addresses stayed the same: `ens37 UP 192.168.100.10/24`
+Reboot test: after a reboot, `elk-siem-node` still had `ens37` UP on `192.168.100.10/24`. and `target-node` `192.168.100.20/24`.
+
 
 #### 9. Result and assessment
-- **Result:** All three VMs are on lab-net with fixed addresses. They can reach each other and the Windows host, and they still reach the internet through NAT.
+- **Result:** All three VMs are on lab-net with fixed addresses. They reach each other and the Windows host, and they still reach the internet through NAT.
 - **Assessment:** The network works, but it is flat, which is what I wanted for now. Any VM can reach any other VM on lab-net. That is fine for phases 2 to 10, and it is exactly what chapter 11 will change.
+- **Problems I hit:** None that blocked the phase.
 
 Phase 2 is base hardening on the two Ubuntu VMs, before Elasticsearch is installed.
-
 
 
 ----------------Work in Progress------------------
